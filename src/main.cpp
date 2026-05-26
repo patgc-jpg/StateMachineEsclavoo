@@ -47,14 +47,16 @@
 #define Z_HOME_STEPS        0
 
 // Motor de garra (cierre)
-#define CLAW_CLOSE_STEPS    300    // pasos para cerrar completamente — ajustar
+#define CLAW_CLOSE_STEPS    1000    // pasos para cerrar completamente — ajustar
 #define CLAW_OPEN_STEPS     0
 
 // ============================================================
 // VELOCIDAD
 // ============================================================
-#define STEP_DELAY_GAME_US  1000UL   // velocidad Y durante el juego
-#define STEP_DELAY_TRAV_US  1000UL   // velocidad en secuencias automáticas
+#define STEP_DELAY_GAME_US        1000UL   // velocidad Y durante el juego
+#define STEP_DELAY_TRAV_US        1000UL   // velocidad en secuencias automáticas
+#define STEP_DELAY_Z_DOWN_US      4000UL   // velocidad al bajar Z (más lento)
+#define STEP_DELAY_CLAW_CLOSE_US   5000UL   // velocidad al cerrar garra (más rápido)
 
 // ============================================================
 // DEBOUNCE
@@ -71,22 +73,22 @@
 
 // Motor Z (sube/baja garra)
 #define MZ_STEP  GPIO_NUM_4
-#define MZ_DIR   GPIO_NUM_13
+#define MZ_DIR   GPIO_NUM_16
 
 // Motor C (abre/cierra garra) — 28BYJ-48 con ULN2003, 4 pines de bobina
 #define MC_P0  GPIO_NUM_14
 #define MC_P1  GPIO_NUM_27
-#define MC_P2  GPIO_NUM_16
-#define MC_P3  GPIO_NUM_17
+#define MC_P2  GPIO_NUM_26
+#define MC_P3  GPIO_NUM_25
 
 // Botones direccionales Y — pull-up: presionado = LOW (conectar a GND)
-#define BTN_FWD  GPIO_NUM_25
-#define BTN_BWD  GPIO_NUM_26
+#define BTN_FWD  GPIO_NUM_32
+#define BTN_BWD  GPIO_NUM_33
 
 // Señales del maestro
 #define MASTER_BEGIN  GPIO_NUM_15   // ENTRADA: HIGH = mover Y al centro
 #define SLAVE_TRIG    GPIO_NUM_23   // ENTRADA: HIGH = ejecutar secuencia de garra
-#define SLAVE_DONE    GPIO_NUM_2    // SALIDA:  HIGH = fase completada
+#define SLAVE_DONE     GPIO_NUM_2    // SALIDA:  HIGH = fase completada
 
 // ============================================================
 // MÁQUINA DE ESTADOS
@@ -187,9 +189,9 @@ static State executeGameY() {
         motorY.setDelay(STEP_DELAY_GAME_US);
     }
 
-    if (btnFwd.isPressed()) {
+    if (btnBwd.isPressed()) {
         if (y_steps < Y_MAX_STEPS) stepY(+1);
-    } else if (btnBwd.isPressed()) {
+    } else if (btnFwd.isPressed()) {
         if (y_steps > Y_HOME_STEPS) stepY(-1);
     }
 
@@ -203,7 +205,7 @@ static State executeGameY() {
 static State executeClawDown() {
     if (is_new_state) {
         onEnterState();
-        motorZ.setDelay(STEP_DELAY_TRAV_US);
+        motorZ.setDelay(STEP_DELAY_Z_DOWN_US);
     }
 
     if (z_steps < Z_MAX_STEPS) { stepZ(+1); return STATE_CLAW_DOWN; }
@@ -214,7 +216,7 @@ static State executeClawDown() {
 static State executeCloseClaw() {
     if (is_new_state) {
         onEnterState();
-        motorC.setDelay(STEP_DELAY_TRAV_US);
+        motorC.setDelay(STEP_DELAY_CLAW_CLOSE_US);
     }
 
     if (claw_steps < CLAW_CLOSE_STEPS) { stepC(+1); return STATE_CLOSE_CLAW; }
