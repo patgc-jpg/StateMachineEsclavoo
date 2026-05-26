@@ -7,17 +7,19 @@
 //   - Motor C  (NEMA + DRV8825) — abre/cierra la garra
 //   - 2 botones direccionales para eje Y (durante GAME)
 //
-// Señales del MAESTRO (entradas en este ESP):
-//   MASTER_BEGIN (GPIO15): HIGH mientras maestro está en BEGIN → esclavo mueve Y al centro
-//   SLAVE_TRIG   (GPIO23): HIGH = maestro pide secuencia de garra (bajar→cerrar→subir→ceroY→abrir)
-//   SLAVE_DONE   (GPIO2):  SALIDA del esclavo → HIGH = terminé la fase actual
+// Comunicación con el MAESTRO — solo 2 cables:
+//   MASTER_SIG (GPIO15): ENTRADA — único cable de señal del maestro al esclavo
+//   SLAVE_DONE (GPIO2):  SALIDA  — el esclavo indica al maestro que terminó la fase
 //
-// Protocolo BEGIN:
-//   maestro pone BEGIN=HIGH → esclavo mueve Y al centro → maestro baja BEGIN → esclavo va a GAME_Y
+// Protocolo (el significado de MASTER_SIG depende del estado actual del esclavo):
 //
-// Protocolo GARRA:
-//   maestro pone TRIG=HIGH → esclavo ejecuta secuencia completa → esclavo pone DONE=HIGH
-//   → maestro pone TRIG=LOW → esclavo pone DONE=LOW → regresa a IDLE
+//   Fase BEGIN:
+//     maestro sube SIG=HIGH → esclavo mueve Y al centro
+//     → maestro baja SIG=LOW → esclavo va a GAME_Y
+//
+//   Fase GARRA (durante GAME_Y):
+//     maestro sube SIG=HIGH → esclavo ejecuta secuencia completa → esclavo sube DONE=HIGH
+//     → maestro baja SIG=LOW → esclavo baja DONE=LOW → regresa a IDLE
 // ============================================================
 
 #include <stdio.h>
@@ -86,9 +88,8 @@
 #define BTN_BWD  GPIO_NUM_33
 
 // Señales del maestro
-#define MASTER_BEGIN  GPIO_NUM_15   // ENTRADA: HIGH = mover Y al centro
-#define SLAVE_TRIG    GPIO_NUM_23   // ENTRADA: HIGH = ejecutar secuencia de garra
-#define SLAVE_DONE     GPIO_NUM_2    // SALIDA:  HIGH = fase completada
+#define MASTER_SIG   GPIO_NUM_15   // ENTRADA: único cable del maestro (BEGIN + TRIG según estado)
+#define SLAVE_DONE   GPIO_NUM_2    // SALIDA:  HIGH = fase completada
 
 // ============================================================
 // MÁQUINA DE ESTADOS
@@ -153,11 +154,11 @@ static void stepC(int dir) {
 // ESTADOS
 // ============================================================
 
-// IDLE — Espera que el maestro active MASTER_BEGIN para sincronizar el inicio
+// IDLE — Espera que el maestro active MASTER_SIG para sincronizar el inicio
 static State executeIdle() {
     if (is_new_state) onEnterState();
 
-    if (gpio_get_level(MASTER_BEGIN) == 1)
+    if (gpio_get_level(MASTER_SIG) == 1)
         return STATE_BEGIN_Y;
 
     return STATE_IDLE;
@@ -176,7 +177,7 @@ static State executeBeginY() {
     else if (y_steps > Y_CENTER_STEPS) { stepY(-1); return STATE_BEGIN_Y; }
 
     // Y en el centro — espera a que el maestro también llegue (BEGIN=LOW) para ir juntos a GAME
-    if (gpio_get_level(MASTER_BEGIN) == 0)
+    if (gpio_get_level(MASTER_SIG) == 0)
         return STATE_GAME_Y;
 
     return STATE_BEGIN_Y;
@@ -195,7 +196,7 @@ static State executeGameY() {
         if (y_steps > Y_HOME_STEPS) stepY(-1);
     }
 
-    if (gpio_get_level(SLAVE_TRIG) == 1)
+    if (gpio_get_level(MASTER_SIG) == 1)
         return STATE_CLAW_DOWN;
 
     return STATE_GAME_Y;
@@ -243,7 +244,7 @@ static State executeDone() {
         printf("[SLAVE] Garra arriba — regresando a home con el maestro\n");
     }
 
-    if (gpio_get_level(SLAVE_TRIG) == 0) {
+    if (gpio_get_level(MASTER_SIG) == 0) {
         gpio_set_level(SLAVE_DONE, 0);
         return STATE_ZERO_Y;   // maestro empieza ZERO_X, esclavo empieza ZERO_Y simultáneamente
     }
@@ -297,15 +298,10 @@ static void setupGPIO() {
     gpio_set_direction(SLAVE_DONE, GPIO_MODE_OUTPUT);
     gpio_set_level(SLAVE_DONE, 0);
 
-    // SLAVE_TRIG — entrada con pull-down (evita disparo en flotante)
-    gpio_reset_pin(SLAVE_TRIG);
-    gpio_set_direction(SLAVE_TRIG, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(SLAVE_TRIG, GPIO_PULLDOWN_ONLY);
-
-    // MASTER_BEGIN — entrada con pull-down
-    gpio_reset_pin(MASTER_BEGIN);
-    gpio_set_direction(MASTER_BEGIN, GPIO_MODE_INPUT);
-    gpio_set_pull_mode(MASTER_BEGIN, GPIO_PULLDOWN_ONLY);
+    // MASTER_SIG — entrada con pull-down (evita disparo en flotante)
+    gpio_reset_pin(MASTER_SIG);
+    gpio_set_direction(MASTER_SIG, GPIO_MODE_INPUT);
+    gpio_set_pull_mode(MASTER_SIG, GPIO_PULLDOWN_ONLY);
 }
 
 // ============================================================
