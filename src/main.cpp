@@ -31,7 +31,7 @@
 #include <driver/gpio.h>
 
 #include "stepmotor.h"   // NEMA + DRV8825 (2 pines: STEP, DIR) — motores Y y Z
-#include "stepper28.h"   // 28BYJ-48 + ULN2003 (4 pines)       — motor de garra
+#include "solenoid.h"    // Solenoide PWM (LEDC)                — garra
 #include "dbutton.h"
 
 // ============================================================
@@ -48,19 +48,12 @@
 // Eje Z (carro vertical)
 #define Z_MAX_STEPS         1000   // pasos para bajar completamente — ajustar
 #define Z_HOME_STEPS        0
-
-// Motor de garra (cierre)
-#define CLAW_CLOSE_STEPS    1000    // pasos para cerrar completamente — ajustar
-#define CLAW_OPEN_STEPS     0
-
 // ============================================================
 // VELOCIDAD
 // ============================================================
 #define STEP_DELAY_GAME_US        1000UL   // velocidad Y durante el juego
 #define STEP_DELAY_TRAV_US        1000UL   // velocidad en secuencias automáticas
-#define STEP_DELAY_Z_DOWN_US      4000UL   // velocidad al bajar Z (más lento)
-#define STEP_DELAY_CLAW_CLOSE_US   5000UL   // velocidad al cerrar garra (más rápido)
-
+#define STEP_DELAY_Z_DOWN_US      4000UL   // velocidad al bajar Z (más lento
 // ============================================================
 // DEBOUNCE
 // ============================================================
@@ -78,11 +71,8 @@
 #define MZ_STEP  GPIO_NUM_4
 #define MZ_DIR   GPIO_NUM_16
 
-// Motor C (abre/cierra garra) — 28BYJ-48 con ULN2003, 4 pines de bobina
-#define MC_P0  GPIO_NUM_14
-#define MC_P1  GPIO_NUM_27
-#define MC_P2  GPIO_NUM_26
-#define MC_P3  GPIO_NUM_25
+// Solenoide de garra — PWM via LEDC
+#define SOLENOID_PIN  GPIO_NUM_14
 
 // Botones direccionales Y — pull-up: presionado = LOW (conectar a GND)
 #define BTN_FWD  GPIO_NUM_32
@@ -115,7 +105,7 @@ struct StateNode { const char *name; StateAction on_loop; };
 // ============================================================
 static StepperMotor    motorY(MY_STEP, MY_DIR, STEP_DELAY_GAME_US);
 static StepperMotor    motorZ(MZ_STEP, MZ_DIR, STEP_DELAY_TRAV_US);
-static Stepper28BYJ    motorC(MC_P0, MC_P1, MC_P2, MC_P3, STEP_DELAY_TRAV_US);
+static Solenoid        solenoid(SOLENOID_PIN);
 static DebouncedButton btnFwd(BTN_FWD, DEBOUNCE_US);
 static DebouncedButton btnBwd(BTN_BWD, DEBOUNCE_US);
 
@@ -125,9 +115,8 @@ static DebouncedButton btnBwd(BTN_BWD, DEBOUNCE_US);
 static bool    is_new_state   = true;
 static int64_t state_start_us = 0;
 
-static int32_t y_steps    = 0;
-static int32_t z_steps    = 0;
-static int32_t claw_steps = 0;
+static int32_t y_steps = 0;
+static int32_t z_steps = 0;
 
 static bool    high_torque_game = false;  // true 1 de cada 10 juegos
 
@@ -148,10 +137,6 @@ static void stepZ(int dir) {
     if (motorZ.update()) z_steps += (dir > 0) ? 1 : -1;
 }
 
-static void stepC(int dir) {
-    motorC.setDirection(dir > 0);
-    if (motorC.update()) claw_steps += (dir > 0) ? 1 : -1;
-}
 
 // ============================================================
 // ESTADOS
@@ -219,15 +204,13 @@ static State executeClawDown() {
     return STATE_CLOSE_CLAW;
 }
 
-// CLOSE_CLAW — Cierra la garra (alto torque si corresponde a este juego)
+// CLOSE_CLAW — Energiza el solenoide (alto o bajo torque según el juego)
 static State executeCloseClaw() {
     if (is_new_state) {
         onEnterState();
-        motorC.setDelay(STEP_DELAY_CLAW_CLOSE_US);
-        motorC.setHighTorque(high_torque_game);
+        if (high_torque_game) solenoid.highTorque();
+        else                  solenoid.lowTorque();
     }
-
-    if (claw_steps < CLAW_CLOSE_STEPS) { stepC(+1); return STATE_CLOSE_CLAW; }
     return STATE_CLAW_UP;
 }
 
