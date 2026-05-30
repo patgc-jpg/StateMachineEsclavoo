@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <stdlib.h>
 #include <esp_timer.h>
 #include <esp_task_wdt.h>
 #include <driver/gpio.h>
@@ -128,6 +129,8 @@ static int32_t y_steps    = 0;
 static int32_t z_steps    = 0;
 static int32_t claw_steps = 0;
 
+static bool    high_torque_game = false;  // true 1 de cada 10 juegos
+
 // ============================================================
 // HELPERS
 // ============================================================
@@ -202,22 +205,26 @@ static State executeGameY() {
     return STATE_GAME_Y;
 }
 
-// CLAW_DOWN — Baja Z hasta el fondo
+// CLAW_DOWN — Baja Z hasta el fondo; al entrar decide si este juego es de alto torque
 static State executeClawDown() {
     if (is_new_state) {
         onEnterState();
         motorZ.setDelay(STEP_DELAY_Z_DOWN_US);
+        int torque_roll  = rand() % 10;
+        high_torque_game = (torque_roll == 0);
+        printf("[SLAVE] Torque roll: %d → %s torque\n", torque_roll, high_torque_game ? "ALTO" : "bajo");
     }
 
     if (z_steps < Z_MAX_STEPS) { stepZ(+1); return STATE_CLAW_DOWN; }
     return STATE_CLOSE_CLAW;
 }
 
-// CLOSE_CLAW — Cierra la garra
+// CLOSE_CLAW — Cierra la garra (alto torque si corresponde a este juego)
 static State executeCloseClaw() {
     if (is_new_state) {
         onEnterState();
         motorC.setDelay(STEP_DELAY_CLAW_CLOSE_US);
+        motorC.setHighTorque(high_torque_game);
     }
 
     if (claw_steps < CLAW_CLOSE_STEPS) { stepC(+1); return STATE_CLOSE_CLAW; }
@@ -268,6 +275,7 @@ static State executeOpenClaw() {
     if (is_new_state) {
         onEnterState();
         motorC.setDelay(STEP_DELAY_TRAV_US);
+        motorC.setHighTorque(false);  // al abrir siempre secuencia normal
     }
 
     if (claw_steps > CLAW_OPEN_STEPS) { stepC(-1); return STATE_OPEN_CLAW; }
@@ -318,6 +326,8 @@ extern "C" void app_main() {
 
     btnFwd.init();
     btnBwd.init();
+
+    srand((unsigned int)esp_timer_get_time());
 
     printf("[SLAVE] Maquina de garra esclavo iniciada\n");
 
