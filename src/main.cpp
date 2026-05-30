@@ -253,16 +253,13 @@ static State executeZeroY() {
     return STATE_OPEN_CLAW;
 }
 
-// OPEN_CLAW — Abre la garra una vez que Y llegó a home
+// OPEN_CLAW — Suelta el solenoide una vez que Y llegó a home
 static State executeOpenClaw() {
     if (is_new_state) {
         onEnterState();
-        motorC.setDelay(STEP_DELAY_TRAV_US);
-        motorC.setHighTorque(false);  // al abrir siempre secuencia normal
+        solenoid.open();
     }
-
-    if (claw_steps > CLAW_OPEN_STEPS) { stepC(-1); return STATE_OPEN_CLAW; }
-    return STATE_IDLE;   // garra abierta, listo para la siguiente ronda
+    return STATE_IDLE;
 }
 
 // ============================================================
@@ -305,7 +302,7 @@ extern "C" void app_main() {
 
     motorY.begin();
     motorZ.begin();
-    motorC.begin();
+    solenoid.begin();
 
     btnFwd.init();
     btnBwd.init();
