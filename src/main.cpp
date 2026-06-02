@@ -75,8 +75,8 @@
 #define SOLENOID_PIN  GPIO_NUM_14
 
 // Botones direccionales Y — pull-up: presionado = LOW (conectar a GND)
-#define BTN_FWD  GPIO_NUM_32
-#define BTN_BWD  GPIO_NUM_33
+#define BTN_FWD  GPIO_NUM_26
+#define BTN_BWD  GPIO_NUM_25
 
 // Señales del maestro
 #define MASTER_SIG   GPIO_NUM_15   // ENTRADA: único cable del maestro (BEGIN + TRIG según estado)

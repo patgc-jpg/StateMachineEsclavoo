@@ -20,8 +20,8 @@ private:
     static constexpr uint32_t          FREQ_HZ    = 150;
     static constexpr ledc_timer_bit_t  RESOLUTION = LEDC_TIMER_10_BIT;
     static constexpr uint32_t          DUTY_OFF   = 0;
-    static constexpr uint32_t          DUTY_LOW   = 614;  // ~60% de 1023
-    static constexpr uint32_t          DUTY_HIGH  = 921;  // ~90% de 1023
+    static constexpr uint32_t          DUTY_LOW   = 716;  // ~60% de 1023
+    static constexpr uint32_t          DUTY_HIGH  = 100;  // ~90% de 1023
 
     void setDuty(uint32_t duty);
 };
