@@ -52,8 +52,15 @@
 // VELOCIDAD
 // ============================================================
 #define STEP_DELAY_GAME_US        1000UL   // velocidad Y durante el juego
-#define STEP_DELAY_TRAV_US        1000UL   // velocidad en secuencias automáticas
-#define STEP_DELAY_Z_DOWN_US      4000UL   // velocidad al bajar Z (más lento
+#define STEP_DELAY_TRAV_US        1000UL   // velocidad en secuencias automáticas (Z sube y baja igual)
+
+// ============================================================
+// TIEMPOS DE SOLENOIDE — ajustar según comportamiento deseado
+// ============================================================
+#define SOLENOID_HOLD_US    2000000UL  // 2 s con garra cerrada antes de subir Z
+#define PRE_OPEN_DELAY_US    400000UL  // 0.4 s de pausa al llegar a Y=0 antes de abrir
+#define SOLENOID_OPEN_US    1500000UL  // 1.5 s con garra abierta antes de volver a IDLE
+
 // ============================================================
 // DEBOUNCE
 // ============================================================
@@ -194,7 +201,8 @@ static State executeGameY() {
 static State executeClawDown() {
     if (is_new_state) {
         onEnterState();
-        motorZ.setDelay(STEP_DELAY_Z_DOWN_US);
+        motorZ.setDelay(STEP_DELAY_TRAV_US);
+        motorZ.resetTimer();
         int torque_roll  = rand() % 10;
         high_torque_game = (torque_roll == 0);
         printf("[SLAVE] Torque roll: %d → %s torque\n", torque_roll, high_torque_game ? "ALTO" : "bajo");
@@ -204,14 +212,16 @@ static State executeClawDown() {
     return STATE_CLOSE_CLAW;
 }
 
-// CLOSE_CLAW — Energiza el solenoide (alto o bajo torque según el juego)
+// CLOSE_CLAW — Energiza el solenoide y espera SOLENOID_HOLD_US antes de subir Z
 static State executeCloseClaw() {
     if (is_new_state) {
         onEnterState();
         if (high_torque_game) solenoid.highTorque();
         else                  solenoid.lowTorque();
     }
-    return STATE_CLAW_UP;
+    if (esp_timer_get_time() - state_start_us >= SOLENOID_HOLD_US)
+        return STATE_CLAW_UP;
+    return STATE_CLOSE_CLAW;
 }
 
 // CLAW_UP — Sube Z de vuelta a home
@@ -219,6 +229,7 @@ static State executeClawUp() {
     if (is_new_state) {
         onEnterState();
         motorZ.setDelay(STEP_DELAY_TRAV_US);
+        motorZ.resetTimer();
     }
 
     if (z_steps > Z_HOME_STEPS) { stepZ(-1); return STATE_CLAW_UP; }
@@ -253,13 +264,20 @@ static State executeZeroY() {
     return STATE_OPEN_CLAW;
 }
 
-// OPEN_CLAW — Suelta el solenoide una vez que Y llegó a home
+// OPEN_CLAW — Pausa breve al llegar a Y=0, luego abre el solenoide y espera SOLENOID_OPEN_US
 static State executeOpenClaw() {
-    if (is_new_state) {
-        onEnterState();
-        solenoid.open();
-    }
-    return STATE_IDLE;
+    if (is_new_state) onEnterState();
+
+    uint64_t elapsed = esp_timer_get_time() - state_start_us;
+
+    if (elapsed < PRE_OPEN_DELAY_US)
+        return STATE_OPEN_CLAW;   // pausa antes de abrir
+
+    solenoid.open();   // idempotente: solo cambia el duty cycle
+
+    if (elapsed >= PRE_OPEN_DELAY_US + SOLENOID_OPEN_US)
+        return STATE_IDLE;
+    return STATE_OPEN_CLAW;
 }
 
 // ============================================================

@@ -12,6 +12,7 @@ public:
     bool update();                   // Non-blocking; returns true if a step actually fired
     void setDelay(uint32_t delayUs);
     void setDirection(bool forward); // true = forward (DIR=HIGH), false = reverse (DIR=LOW)
+    void resetTimer();               // Llama al entrar a un estado de movimiento; evita el primer paso instantáneo
     void ReverseDirec();
 
 private:

@@ -21,6 +21,7 @@ void StepperMotor::begin() {
 bool StepperMotor::update() {
     uint64_t now = esp_timer_get_time();
     if (now - lastTime >= stepDelayUs) {
+        esp_rom_delay_us(1);          // garantiza TSET >= 650 ns del DRV8825 tras cambio de DIR
         gpio_set_level(_stepPin, 1);
         esp_rom_delay_us(2);          // cumple el mínimo de 1.9 µs del DRV8825
         gpio_set_level(_stepPin, 0);
@@ -31,8 +32,13 @@ bool StepperMotor::update() {
 }
 
 void StepperMotor::setDirection(bool forward) {
+    if (_forward == forward) return;  // evita escritura GPIO innecesaria si no cambia
     _forward = forward;
     gpio_set_level(_dirPin, forward ? 1 : 0);
+}
+
+void StepperMotor::resetTimer() {
+    lastTime = esp_timer_get_time();
 }
 
 void StepperMotor::ReverseDirec() {
